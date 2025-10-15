@@ -55,6 +55,7 @@ interface StudyStats {
   totalTime: number
   sessionsCount: number
   completionRate: number
+  averageSessionTime?: number
   lastStudied?: string
 }
 
@@ -167,6 +168,7 @@ export default function CourseDetailPage() {
         totalTime: totalStudyTime,
         sessionsCount: studySessions?.length || 0,
         completionRate,
+        averageSessionTime: studySessions && studySessions.length > 0 ? Math.round(totalStudyTime / studySessions.length) : 0,
         lastStudied: studySessions?.[0]?.start_time
       }
 
@@ -634,11 +636,10 @@ export default function CourseDetailPage() {
 
         {/* Course Content */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="files">Files</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
-            <TabsTrigger value="bookmarks">Bookmarks</TabsTrigger>
             <TabsTrigger value="stats">Statistics</TabsTrigger>
             <TabsTrigger value="related">Related</TabsTrigger>
           </TabsList>
@@ -995,42 +996,6 @@ export default function CourseDetailPage() {
             </Card>
           </TabsContent>
 
-          {/* Bookmarks Tab */}
-          <TabsContent value="bookmarks" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Bookmarks</CardTitle>
-                <CardDescription>Important sections and files you've bookmarked</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {false ? (
-                  <div className="space-y-3">
-                    {bookmarks.map((bookmark) => (
-                      <div key={bookmark.id} className="flex items-center gap-3 p-3 border rounded-lg">
-                        <Bookmark className="w-4 h-4 text-blue-600" />
-                        <div className="flex-1">
-                          <h4 className="font-medium text-sm">{bookmark.title}</h4>
-                          <p className="text-xs text-gray-500">
-                            Bookmarked {formatDate(new Date(bookmark.created_at))}
-                          </p>
-                        </div>
-                        <Button variant="ghost" size="sm">
-                          <ExternalLink className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12 text-gray-500">
-                    <Bookmark className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No bookmarks yet</p>
-                    <p className="text-sm mt-2">Bookmark important files and sections</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
           {/* Statistics Tab */}
           <TabsContent value="stats" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1112,38 +1077,11 @@ export default function CourseDetailPage() {
                 <CardDescription>Other courses in the same subject area</CardDescription>
               </CardHeader>
               <CardContent>
-                {false ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {relatedCourses.map((relatedCourse) => (
-                      <Link key={relatedCourse.id} href={`/dashboard/courses/${relatedCourse.id}`}>
-                        <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                              <BookOpen className="w-4 h-4 text-blue-600" />
-                              <Badge variant="secondary" className="text-xs">
-                                {relatedCourse.subject}
-                              </Badge>
-                            </div>
-                            <h3 className="font-medium text-sm mb-1">{relatedCourse.name}</h3>
-                            <p className="text-xs text-gray-600 mb-2">
-                              {relatedCourse.description?.substring(0, 100)}...
-                            </p>
-                            <div className="flex items-center justify-between text-xs text-gray-500">
-                              <span>{relatedCourse.file_count} files</span>
-                              <span>{formatDate(new Date(relatedCourse.created_at))}</span>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12 text-gray-500">
-                    <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No related courses found</p>
-                    <p className="text-sm mt-2">Upload more courses in the same subject to see related content</p>
-                  </div>
-                )}
+                <div className="text-center py-12 text-gray-500">
+                  <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>Related courses feature coming soon</p>
+                  <p className="text-sm mt-2">Upload more courses in the same subject to see related content</p>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

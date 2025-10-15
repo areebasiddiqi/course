@@ -3,7 +3,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Create custom types
 CREATE TYPE user_role AS ENUM ('student', 'admin');
-CREATE TYPE subscription_plan AS ENUM ('free', 'semester', 'session');
+CREATE TYPE subscription_plan AS ENUM ('free', 'Free', 'Semester Plan', 'Session Plan');
 CREATE TYPE subscription_status AS ENUM ('active', 'inactive', 'cancelled');
 CREATE TYPE question_type AS ENUM ('multiple_choice', 'true_false', 'short_answer', 'essay', 'fill_blank');
 CREATE TYPE difficulty_level AS ENUM ('easy', 'medium', 'hard');
@@ -12,7 +12,6 @@ CREATE TYPE task_priority AS ENUM ('high', 'medium', 'low');
 CREATE TYPE task_status AS ENUM ('todo', 'in_progress', 'completed');
 CREATE TYPE project_status AS ENUM ('planning', 'in_progress', 'completed', 'submitted');
 CREATE TYPE group_role AS ENUM ('admin', 'moderator', 'member');
-CREATE TYPE message_type AS ENUM ('text', 'file', 'image', 'voice');
 CREATE TYPE event_type AS ENUM ('study_session', 'workshop', 'webinar', 'hackathon', 'networking');
 CREATE TYPE companion_type AS ENUM ('dog', 'cat', 'tree');
 CREATE TYPE achievement_category AS ENUM ('study', 'social', 'streak', 'course', 'assessment');
@@ -32,6 +31,7 @@ CREATE TABLE public.users (
     subscription_plan subscription_plan DEFAULT 'free',
     subscription_status subscription_status DEFAULT 'inactive',
     subscription_end_date TIMESTAMP WITH TIME ZONE,
+    stripe_customer_id TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -114,6 +114,7 @@ CREATE TABLE public.study_groups (
     university TEXT,
     is_public BOOLEAN DEFAULT TRUE,
     member_limit INTEGER,
+    tags TEXT[] DEFAULT '{}',
     created_by UUID REFERENCES public.users(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     member_count INTEGER DEFAULT 1
@@ -127,20 +128,6 @@ CREATE TABLE public.group_members (
     role group_role DEFAULT 'member',
     joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(group_id, user_id)
-);
-
--- Messages table
-CREATE TABLE public.messages (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    group_id UUID REFERENCES public.study_groups(id) ON DELETE CASCADE,
-    sender_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
-    content TEXT NOT NULL,
-    message_type message_type DEFAULT 'text',
-    file_url TEXT,
-    reply_to UUID REFERENCES public.messages(id) ON DELETE SET NULL,
-    edited BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- User progress table
@@ -250,7 +237,6 @@ CREATE INDEX idx_study_sessions_user_id ON public.study_sessions(user_id);
 CREATE INDEX idx_assessments_user_id ON public.assessments(user_id);
 CREATE INDEX idx_assessment_attempts_user_id ON public.assessment_attempts(user_id);
 CREATE INDEX idx_group_members_user_id ON public.group_members(user_id);
-CREATE INDEX idx_messages_group_id ON public.messages(group_id);
 CREATE INDEX idx_tasks_user_id ON public.tasks(user_id);
 CREATE INDEX idx_projects_user_id ON public.projects(user_id);
 
@@ -263,7 +249,6 @@ ALTER TABLE public.assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.assessment_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.study_groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.group_members ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.usage_stats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
@@ -302,19 +287,19 @@ CREATE POLICY "Group admins can update groups" ON public.study_groups FOR UPDATE
     EXISTS (SELECT 1 FROM public.group_members WHERE group_members.group_id = study_groups.id AND group_members.user_id = auth.uid() AND group_members.role = 'admin')
 );
 
+-- Function to safely check if user is member of a group (avoids circular reference)
+CREATE OR REPLACE FUNCTION is_group_member(group_id UUID, user_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (SELECT 1 FROM public.group_members WHERE group_members.group_id = is_group_member.group_id AND group_members.user_id = is_group_member.user_id);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Group members policies
-CREATE POLICY "Users can view group members" ON public.group_members FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.group_members gm WHERE gm.group_id = group_members.group_id AND gm.user_id = auth.uid())
+CREATE POLICY "Users can view group members in their groups" ON public.group_members FOR SELECT USING (
+    is_group_member(group_id, auth.uid())
 );
 CREATE POLICY "Users can join groups" ON public.group_members FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- Messages policies
-CREATE POLICY "Group members can view messages" ON public.messages FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.group_members WHERE group_members.group_id = messages.group_id AND group_members.user_id = auth.uid())
-);
-CREATE POLICY "Group members can send messages" ON public.messages FOR INSERT WITH CHECK (
-    auth.uid() = sender_id AND EXISTS (SELECT 1 FROM public.group_members WHERE group_members.group_id = messages.group_id AND group_members.user_id = auth.uid())
-);
 
 -- User progress policies
 CREATE POLICY "Users can view own progress" ON public.user_progress FOR ALL USING (auth.uid() = user_id);
@@ -334,9 +319,10 @@ CREATE POLICY "Users can manage own projects" ON public.projects FOR ALL USING (
 CREATE POLICY "Users can manage own tasks" ON public.tasks FOR ALL USING (auth.uid() = user_id);
 
 -- Insert default subscription plans
-INSERT INTO public.subscription_plans (name, price, duration_months, ai_queries_limit, audio_minutes_limit, project_generations_limit, features) VALUES
-('Semester Plan', 1500, 4, 500, 120, 20, ARRAY['Unlimited course uploads', 'Unlimited mock tests', 'Full group study access', 'Basic analytics', 'Email support']),
-('Session Plan', 2500, 12, 2000, 500, 100, ARRAY['Unlimited course uploads', 'Unlimited mock tests', 'Full group study access', 'Advanced analytics', 'Priority support', 'Early access to beta features']);
+INSERT INTO public.subscription_plans (name, price, duration_months, ai_queries_limit, audio_minutes_limit, project_generations_limit, features, stripe_price_id) VALUES
+('Free', 0, 1, 10, 5, 1, ARRAY['Basic course uploads', 'Limited AI queries', 'Community support'], null),
+('Semester Plan', 1500, 4, 500, 120, 20, ARRAY['Unlimited course uploads', 'Unlimited mock tests', 'Full group study access', 'Basic analytics', 'Email support'], 'price_semester_plan_stripe_id'),
+('Session Plan', 2500, 12, 2000, 500, 100, ARRAY['Unlimited course uploads', 'Unlimited mock tests', 'Full group study access', 'Advanced analytics', 'Priority support', 'Early access to beta features'], 'price_session_plan_stripe_id');
 
 -- Insert default achievements
 INSERT INTO public.achievements (name, description, icon, category, requirements, xp_reward, badge_color) VALUES
@@ -358,7 +344,6 @@ $$ language 'plpgsql';
 -- Create triggers for updated_at columns
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_courses_updated_at BEFORE UPDATE ON public.courses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_messages_updated_at BEFORE UPDATE ON public.messages FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON public.projects FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_tasks_updated_at BEFORE UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 

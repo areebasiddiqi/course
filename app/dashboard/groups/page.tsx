@@ -13,7 +13,6 @@ import {
   Users,
   Plus,
   Search,
-  MessageSquare,
   Crown,
   Shield,
   User,
@@ -382,12 +381,6 @@ export default function GroupsPage() {
                     )}
 
                     <div className="flex gap-2">
-                      <Link href={`/dashboard/groups/${group.id}`} className="flex-1">
-                        <Button variant="outline" size="sm" className="w-full">
-                          <MessageSquare className="w-4 h-4 mr-2" />
-                          Open
-                        </Button>
-                      </Link>
                       {group.user_role === 'admin' ? (
                         <Button variant="outline" size="sm">
                           <Settings className="w-4 h-4" />
