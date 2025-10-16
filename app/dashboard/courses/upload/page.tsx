@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers/auth-provider'
+import { useBilling } from '@/components/providers/billing-provider'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,7 @@ export default function CourseUploadPage() {
   const { user } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
+  const { showUpgradePopup, checkCourseLimit, checkStorageLimit } = useBilling()
   const supabase = createSupabaseClient()
 
   const [courseName, setCourseName] = useState('')
@@ -182,6 +184,28 @@ export default function CourseUploadPage() {
         description: 'Please fill in course name, subject, and upload at least one file.',
         variant: 'destructive'
       })
+      return
+    }
+
+    // Check course limit
+    try {
+      const { data: existingCourses } = await supabase
+        .from('courses')
+        .select('id')
+        .eq('user_id', user?.id)
+      
+      if (!checkCourseLimit(existingCourses?.length || 0)) {
+        showUpgradePopup('limit', 'Course Upload')
+        return
+      }
+    } catch (error) {
+      console.error('Error checking course limit:', error)
+    }
+
+    // Check storage limit for each file
+    const totalFileSize = files.reduce((sum, f) => sum + f.file.size, 0)
+    if (!checkStorageLimit(totalFileSize)) {
+      showUpgradePopup('storage', 'Course Upload')
       return
     }
 

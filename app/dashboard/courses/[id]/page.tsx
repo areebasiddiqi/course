@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
+import { useBilling } from '@/components/providers/billing-provider'
 import { 
   BookOpen, 
   Play, 
@@ -30,7 +31,9 @@ import {
   Bookmark,
   ExternalLink,
   StickyNote,
-  Upload
+  Upload,
+  Crown,
+  Zap
 } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase-client'
 import { formatDate } from '@/lib/utils'
@@ -65,6 +68,13 @@ export default function CourseDetailPage() {
   const router = useRouter()
   const { user } = useAuth()
   const { toast } = useToast()
+  const { 
+    showUpgradePopup, 
+    showBillingNotification, 
+    checkFeatureAccess, 
+    checkStorageLimit, 
+    checkCourseLimit 
+  } = useBilling()
   const [course, setCourse] = useState<Course | null>(null)
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [loading, setLoading] = useState(true)
@@ -220,6 +230,17 @@ export default function CourseDetailPage() {
 
   const handleAddNote = () => {
     if (!newNote.trim()) return
+    
+    // Check if user has access to advanced notes (more than 3 notes)
+    if (notes.length >= 3 && !checkFeatureAccess('advanced-notes')) {
+      showBillingNotification(
+        'Note Limit Reached',
+        'Free users can create up to 3 notes per course. Upgrade for unlimited notes and advanced features.',
+        'Advanced Notes',
+        'warning'
+      )
+      return
+    }
     
     const note: Note = {
       id: Date.now().toString(),
@@ -423,6 +444,17 @@ export default function CourseDetailPage() {
   }
 
   const handleViewAnalytics = () => {
+    // Check if user has access to advanced analytics
+    if (!checkFeatureAccess('advanced-analytics')) {
+      showBillingNotification(
+        'Premium Analytics',
+        'Get detailed insights into your learning patterns, time tracking, and performance metrics.',
+        'Advanced Analytics',
+        'premium'
+      )
+      return
+    }
+    
     // Switch to statistics tab
     const statsTab = document.querySelector('[value="stats"]') as HTMLElement
     if (statsTab) {
@@ -577,6 +609,17 @@ export default function CourseDetailPage() {
                       size="sm" 
                       className="flex-1"
                       onClick={() => {
+                        // Check if user has access to bulk downloads
+                        if (course.files && course.files.length > 1 && !checkFeatureAccess('bulk-download')) {
+                          showBillingNotification(
+                            'Bulk Download',
+                            'Download all course files at once with Pro. Free users can download files individually.',
+                            'Bulk Download',
+                            'premium'
+                          )
+                          return
+                        }
+                        
                         if (course.files && course.files.length > 0) {
                           // Download all files
                           course.files.forEach((file, index) => {
@@ -761,6 +804,34 @@ export default function CourseDetailPage() {
                     >
                       <BarChart3 className="w-4 h-4 mr-2" />
                       View Analytics
+                      {!checkFeatureAccess('advanced-analytics') && (
+                        <Crown className="w-3 h-3 ml-auto text-yellow-500" />
+                      )}
+                    </Button>
+                    <Button 
+                      className="w-full justify-start" 
+                      variant="outline"
+                      onClick={() => {
+                        if (!checkFeatureAccess('ai-insights')) {
+                          showBillingNotification(
+                            'AI Study Insights',
+                            'Get personalized recommendations and study tips powered by AI.',
+                            'AI Insights',
+                            'premium'
+                          )
+                          return
+                        }
+                        toast({
+                          title: 'AI Insights',
+                          description: 'Analyzing your study patterns...'
+                        })
+                      }}
+                    >
+                      <Zap className="w-4 h-4 mr-2" />
+                      AI Insights
+                      {!checkFeatureAccess('ai-insights') && (
+                        <Crown className="w-3 h-3 ml-auto text-yellow-500" />
+                      )}
                     </Button>
                   </CardContent>
                 </Card>
@@ -779,6 +850,31 @@ export default function CourseDetailPage() {
                     )}
                   </CardContent>
                 </Card>
+
+                {/* Upgrade Prompt for Free Users */}
+                {!checkFeatureAccess('ai-insights') && (
+                  <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center">
+                        <Crown className="w-5 h-5 mr-2 text-yellow-500" />
+                        Unlock Premium
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-gray-600 mb-3">
+                        Get AI insights, unlimited storage, and advanced analytics.
+                      </p>
+                      <Button 
+                        onClick={() => showUpgradePopup('upgrade', 'Quick Actions')}
+                        className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                        size="sm"
+                      >
+                        <Crown className="w-4 h-4 mr-2" />
+                        Upgrade Now
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </div>
           </TabsContent>

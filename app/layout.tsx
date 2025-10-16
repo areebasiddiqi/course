@@ -3,6 +3,7 @@ import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 import { AuthProvider } from '@/components/providers/auth-provider'
 import { ThemeProvider } from '@/components/providers/theme-provider'
+import { BillingProvider } from '@/components/providers/billing-provider'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -27,8 +28,10 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
-            {children}
-            <Toaster />
+            <BillingProvider>
+              {children}
+              <Toaster />
+            </BillingProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>
