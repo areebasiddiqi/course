@@ -160,6 +160,16 @@ CREATE TABLE public.achievements (
     badge_color TEXT DEFAULT '#3B82F6'
 );
 
+-- XP Activities table (for tracking XP earning history)
+CREATE TABLE public.xp_activities (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    activity_type TEXT NOT NULL,
+    xp_earned INTEGER NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Subscription plans table
 CREATE TABLE public.subscription_plans (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -469,3 +479,4 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Run the sync function to fix existing users
 SELECT sync_existing_users();
+

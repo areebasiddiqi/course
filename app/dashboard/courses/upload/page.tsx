@@ -23,6 +23,7 @@ import {
 import { useDropzone } from 'react-dropzone'
 import { createSupabaseClient } from '@/lib/supabase-client'
 import { formatFileSize } from '@/lib/utils'
+import { awardXP } from '@/lib/achievement-system'
 import Link from 'next/link'
 
 interface UploadedFile {
@@ -289,9 +290,33 @@ export default function CourseUploadPage() {
         return
       }
 
+      // Award XP for course upload
+      if (user?.id) {
+        try {
+          const newAchievements = await awardXP(
+            user.id,
+            75,
+            'course_upload',
+            `Uploaded course: ${courseName}`
+          )
+
+          // Show achievement notifications
+          if (newAchievements.length > 0) {
+            newAchievements.forEach(achievement => {
+              toast({
+                title: '🏆 Achievement Unlocked!',
+                description: `${achievement.name} (+${achievement.xp_reward} XP)`,
+              })
+            })
+          }
+        } catch (error) {
+          console.error('Error awarding XP for course upload:', error)
+        }
+      }
+
       toast({
         title: 'Course uploaded successfully!',
-        description: `${courseName} has been uploaded with ${fileRecords.length} files.`
+        description: `${courseName} has been uploaded with ${fileRecords.length} files. (+75 XP)`
       })
 
       router.push(`/dashboard/courses/${course.id}`)
@@ -334,43 +359,6 @@ export default function CourseUploadPage() {
               <p className="text-gray-600 mt-2">
                 Add your study materials and let AI help you learn better
               </p>
-            </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                onClick={async () => {
-                  try {
-                    const response = await fetch('/api/check-env')
-                    const data = await response.json()
-                    console.log('Environment check:', data)
-                    
-                    if (data.status === 'ready') {
-                      toast({
-                        title: 'Environment Ready',
-                        description: 'All required configuration is set up correctly.'
-                      })
-                    } else {
-                      toast({
-                        title: 'Configuration Issue',
-                        description: data.message,
-                        variant: 'destructive'
-                      })
-                    }
-                  } catch (error) {
-                    console.error('Environment check failed:', error)
-                    toast({
-                      title: 'Check Failed',
-                      description: 'Could not verify environment configuration.',
-                      variant: 'destructive'
-                    })
-                  }
-                }}
-              >
-                Check Setup
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/test-upload">Test Upload</Link>
-              </Button>
             </div>
           </div>
         </div>

@@ -11,6 +11,7 @@ import { Progress } from '@/components/ui/progress'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import { useToast } from '@/components/ui/use-toast'
 import { 
   Clock, 
   CheckCircle, 
@@ -25,6 +26,7 @@ import {
   BookOpen
 } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase-client'
+import { awardXP } from '@/lib/achievement-system'
 
 interface Question {
   id: string
@@ -62,6 +64,7 @@ export default function AssessmentPage() {
   const params = useParams()
   const router = useRouter()
   const { user } = useAuth()
+  const { toast } = useToast()
   const [assessment, setAssessment] = useState<Assessment | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
   const [currentQuestion, setCurrentQuestion] = useState(0)
@@ -248,9 +251,38 @@ export default function AssessmentPage() {
     setResult(attemptResult)
     setCompleted(true)
 
-    // Save result to database
+    // Save result to database and award XP
     try {
-      // Implement result saving logic
+      // Award XP based on performance
+      if (user?.id) {
+        let xpAmount = 0
+        if (passed) {
+          // Base XP for passing + bonus based on score
+          xpAmount = 50 + Math.floor(percentage / 10) * 5
+        } else {
+          // Participation XP even if failed
+          xpAmount = 20
+        }
+        
+        const newAchievements = await awardXP(
+          user.id, 
+          xpAmount, 
+          'assessment_complete', 
+          `Completed assessment: ${assessment.title} (${percentage.toFixed(1)}%)`
+        )
+
+        // Show achievement notifications
+        if (newAchievements.length > 0) {
+          newAchievements.forEach(achievement => {
+            toast({
+              title: '🏆 Achievement Unlocked!',
+              description: `${achievement.name} (+${achievement.xp_reward} XP)`,
+            })
+          })
+        }
+      }
+
+      // TODO: Implement result saving to database
     } catch (error) {
       console.error('Error saving assessment result:', error)
     }

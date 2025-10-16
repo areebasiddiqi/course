@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useToast } from '@/components/ui/use-toast'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { 
   Users,
@@ -27,6 +28,7 @@ import {
 } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase-client'
 import { formatDate } from '@/lib/utils'
+import { awardXP } from '@/lib/achievement-system'
 import Link from 'next/link'
 
 interface StudyGroup {
@@ -57,6 +59,7 @@ interface GroupStats {
 
 export default function GroupsPage() {
   const { user } = useAuth()
+  const { toast } = useToast()
   const [groups, setGroups] = useState<StudyGroup[]>([])
   const [myGroups, setMyGroups] = useState<StudyGroup[]>([])
   const [stats, setStats] = useState<GroupStats>({
@@ -181,8 +184,40 @@ export default function GroupsPage() {
 
       if (error) {
         console.error('Error joining group:', error)
+        toast({
+          title: 'Error',
+          description: 'Failed to join group. Please try again.',
+          variant: 'destructive'
+        })
         return
       }
+
+      // Award XP for joining a group
+      try {
+        const newAchievements = await awardXP(
+          user.id,
+          80,
+          'group_join',
+          'Joined a study group'
+        )
+
+        // Show achievement notifications
+        if (newAchievements.length > 0) {
+          newAchievements.forEach(achievement => {
+            toast({
+              title: '🏆 Achievement Unlocked!',
+              description: `${achievement.name} (+${achievement.xp_reward} XP)`,
+            })
+          })
+        }
+      } catch (error) {
+        console.error('Error awarding XP for joining group:', error)
+      }
+
+      toast({
+        title: 'Joined Group!',
+        description: 'You have successfully joined the study group. (+80 XP)'
+      })
 
       // Refresh groups
       fetchGroups()

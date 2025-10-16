@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useAuth } from '@/components/providers/auth-provider'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,15 +27,15 @@ import {
   Trash2,
   Users,
   Share2,
-  Upload,
   Bookmark,
   ExternalLink,
-  StickyNote
+  StickyNote,
+  Upload
 } from 'lucide-react'
 import { createSupabaseClient } from '@/lib/supabase-client'
-import { Course } from '@/types'
 import { formatDate } from '@/lib/utils'
-import Link from 'next/link'
+import { awardXP } from '@/lib/achievement-system'
+import { Course } from '@/types'
 
 interface Lesson {
   id: string
@@ -276,7 +277,7 @@ export default function CourseDetailPage() {
 
     // Award XP for first-time file views
     if (isFirstView && user?.id) {
-      await awardXP(10, 'file_view', `Viewed ${fileName}`)
+      await handleAwardXP(10, 'file_view', `Viewed ${fileName}`)
     }
 
     toast({
@@ -285,44 +286,21 @@ export default function CourseDetailPage() {
     })
   }
 
-  const awardXP = async (amount: number, activity: string, description: string) => {
+  const handleAwardXP = async (amount: number, activity: string, description: string) => {
     if (!user?.id) return
 
     try {
-      // Update user progress in database
-      const { data: currentProgress } = await supabase
-        .from('user_progress')
-        .select('*')
-        .eq('user_id', user.id)
-        .single()
-
-      const newXP = (currentProgress?.xp || 0) + amount
-      const newLevel = Math.floor(newXP / 100) + 1
-      const currentStreak = currentProgress?.current_streak || 0
-
-      await supabase
-        .from('user_progress')
-        .upsert({
-          user_id: user.id,
-          xp: newXP,
-          level: newLevel,
-          current_streak: currentStreak,
-          longest_streak: Math.max(currentStreak, currentProgress?.longest_streak || 0),
-          last_activity: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+      const newAchievements = await awardXP(user.id, amount, activity, description)
+      
+      // Show notifications for new achievements
+      if (newAchievements.length > 0) {
+        newAchievements.forEach(achievement => {
+          toast({
+            title: '🏆 Achievement Unlocked!',
+            description: `${achievement.name} (+${achievement.xp_reward} XP)`,
+          })
         })
-
-      // Log the XP activity
-      await supabase
-        .from('xp_activities')
-        .insert({
-          user_id: user.id,
-          activity_type: activity,
-          xp_earned: amount,
-          description: description,
-          created_at: new Date().toISOString()
-        })
-
+      }
     } catch (error) {
       console.error('Error awarding XP:', error)
     }
@@ -371,7 +349,7 @@ export default function CourseDetailPage() {
       })
 
       // Award XP for starting a study session
-      await awardXP(5, 'session_start', 'Started a study session')
+      await handleAwardXP(5, 'session_start', 'Started a study session')
 
       toast({
         title: 'Study Session Started!',
@@ -415,7 +393,7 @@ export default function CourseDetailPage() {
 
       // Award XP based on study duration (1 XP per minute, minimum 10 XP)
       const sessionXP = Math.max(10, minutes)
-      await awardXP(sessionXP, 'session_complete', `Completed ${minutes}m ${seconds}s study session`)
+      await handleAwardXP(sessionXP, 'session_complete', `Completed ${minutes}m ${seconds}s study session`)
 
       toast({
         title: 'Study Session Completed!',
